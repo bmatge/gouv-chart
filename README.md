@@ -44,7 +44,22 @@ Aucune dépendance à installer — tout est chargé via CDN.
 
 ## Déploiement
 
-Le push sur `main` déclenche automatiquement le déploiement GitHub Pages via l'action `.github/workflows/deploy-pages.yml`.
+Deux cibles :
+
+- **GitHub Pages** — le push sur `main` déclenche automatiquement le déploiement via l'action `.github/workflows/deploy-pages.yml`.
+- **Lab VibeLab (Docker)** — page statique servie par nginx, conteneurisée pour le lab `lab.miweb.run` :
+
+  ```sh
+  # build + run local
+  docker build -t gouv-chart .
+  docker run --rm -p 8080:80 gouv-chart   # http://localhost:8080
+
+  # déploiement sur le lab via spawn
+  ssh vps "spawn up gouv-chart git@github.com:bmatge/gouv-chart.git"
+  # → https://gouv-chart.lab.miweb.run
+  ```
+
+  Le `docker-compose.yml` respecte le contrat spawn (réseau `proxy`, labels Traefik, port interne 80).
 
 ## Limites connues
 

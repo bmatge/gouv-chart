@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.${APP_NAME}.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.${APP_NAME}.entrypoints=websecure
+      - traefik.http.routers.${APP_NAME}.tls.certresolver=letsencrypt
+      - traefik.http.services.${APP_NAME}.loadbalancer.server.port=80
+
+# Réseau Traefik partagé du lab VibeLab (spawn). APP_NAME / DOMAIN injectés par spawn.
+networks:
+  proxy:
+    external: true

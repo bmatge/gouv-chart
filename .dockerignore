@@ -1,0 +1,12 @@
+.git
+.github
+.gitignore
+node_modules
+tests
+package.json
+package-lock.json
+*.md
+.claude
+Dockerfile
+docker-compose.yml
+.dockerignore
