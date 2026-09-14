@@ -50,11 +50,20 @@ function getGristBaseUrl() {
   return sel;
 }
 
-/* Maps known GRIST hosts to Charts Builder proxy paths */
-const GRIST_PROXIES = {
-  'grist.numerique.gouv.fr': 'https://chartsbuilder.matge.com/grist-gouv-proxy',
-  'docs.getgrist.com': 'https://chartsbuilder.matge.com/grist-proxy'
-};
+/* Mode d'acces a l'API : 'direct' | 'local' | 'chartsbuilder' (cf. gristApiBase) */
+function getGristMode() {
+  return document.getElementById('grist-access').value;
+}
+
+function gristFetchHint(mode) {
+  if (mode === 'local') {
+    return 'Proxy local injoignable : la route /grist-gouv/ n\'existe que sur le déploiement nginx/Docker. Ouvrez la page via ce déploiement, ou repassez en « Direct ».';
+  }
+  if (mode === 'chartsbuilder') {
+    return 'Proxy Charts Builder injoignable (service historique). Repassez en « Direct » ou « Proxy local ».';
+  }
+  return 'Appel direct au serveur GRIST impossible (CORS ou réseau). Si l\'instance GRIST refuse les appels navigateur, basculez « Accès API » sur « Proxy local ».';
+}
 
 async function gristApiFetch(path) {
   const baseUrl = getGristBaseUrl();
@@ -62,14 +71,21 @@ async function gristApiFetch(path) {
   if (!baseUrl) throw new Error('Renseignez le serveur GRIST.');
   if (!apiKey) throw new Error('Renseignez la clé API.');
 
-  const host = new URL(baseUrl).hostname;
-  const proxyBase = GRIST_PROXIES[host];
-  const url = proxyBase ? proxyBase + path : baseUrl + path;
+  const mode = getGristMode();
+  const url = gristApiBase(baseUrl, mode) + path;
 
-  const res = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + apiKey }
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} — ${res.statusText}`);
+  let res;
+  try {
+    res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + apiKey } });
+  } catch (err) {
+    throw new Error(gristFetchHint(mode) + ' [' + (err.message || err) + ']');
+  }
+
+  if (!res.ok) {
+    let detail = '';
+    try { const body = await res.json(); detail = body.error || body.message || ''; } catch (e) { /* reponse non JSON */ }
+    throw new Error(`HTTP ${res.status} — ${detail || res.statusText}`);
+  }
   return res.json();
 }
 
@@ -678,8 +694,6 @@ async function generateFromGrist() {
   if (!docId) { alert('Renseignez l\'ID du document.'); return; }
   if (!tableId) { alert('Sélectionnez une table.'); return; }
 
-  const gristRecordsUrl = baseUrl + '/api/docs/' + encodeURIComponent(docId) + '/tables/' + encodeURIComponent(tableId) + '/records';
-
   const threshold = parseInt(document.getElementById('threshold').value);
   const wrap = document.getElementById('chart-wrap');
   const emptyEl = document.getElementById('empty-state');
@@ -704,37 +718,9 @@ async function generateFromGrist() {
   btn.disabled = true;
 
   try {
-    // Configure gouv-source
-    const src = document.getElementById('grist-src');
-    src.setAttribute('api-type', 'grist');
-    src.setAttribute('base-url', gristRecordsUrl);
-    src.setAttribute('headers', JSON.stringify({ Authorization: 'Bearer ' + gristKey }));
-    src.setAttribute('use-proxy', '');
-    src.setAttribute('limit', '0');
-
-    // Configure gouv-normalize
-    const norm = document.getElementById('grist-norm');
-    norm.setAttribute('source', 'grist-src');
-    norm.setAttribute('rename', GRIST_RENAME);
-    norm.setAttribute('trim', '');
-
-    // Wait for data
-    const records = await new Promise((resolve, reject) => {
-      const onData = (e) => {
-        norm.removeEventListener('gouv-data-error', onError);
-        const data = e.detail || (norm.getData ? norm.getData() : []);
-        resolve(Array.isArray(data) ? data : []);
-      };
-      const onError = (e) => {
-        norm.removeEventListener('gouv-data-loaded', onData);
-        reject(e.detail || new Error('Erreur GRIST'));
-      };
-      norm.addEventListener('gouv-data-loaded', onData, { once: true });
-      norm.addEventListener('gouv-data-error', onError, { once: true });
-
-      // Trigger fetch
-      if (src.reload) src.reload();
-    });
+    const json = await gristApiFetch('/api/docs/' + encodeURIComponent(docId) +
+      '/tables/' + encodeURIComponent(tableId) + '/records');
+    const records = gristApiToRecords(json, GRIST_RENAME);
 
     loaderMsg.textContent = `${records.length} enregistrements, construction de l'arbre…`;
 

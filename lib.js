@@ -189,6 +189,65 @@ function detachNode(root, id) {
   return null;
 }
 
+/* ── Acces API GRIST : resolution de la base d'URL ── */
+
+/* Reverse proxy same-origin servi par nginx (voir nginx.conf) — pas de CORS */
+const GRIST_LOCAL_PROXIES = {
+  'grist.numerique.gouv.fr': '/grist-gouv',
+  'docs.getgrist.com': '/grist-saas'
+};
+
+/* Proxy Charts Builder (historique, conserve en secours) */
+const GRIST_CB_PROXIES = {
+  'grist.numerique.gouv.fr': 'https://chartsbuilder.matge.com/grist-gouv-proxy',
+  'docs.getgrist.com': 'https://chartsbuilder.matge.com/grist-proxy'
+};
+
+/* mode : 'direct' | 'local' | 'chartsbuilder'. Serveur inconnu d'une table de
+   proxy => on retombe sur l'appel direct. */
+function gristApiBase(baseUrl, mode) {
+  const clean = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!clean || !mode || mode === 'direct') return clean;
+
+  let host;
+  try { host = new URL(clean).hostname; } catch (e) { return clean; }
+
+  const proxies = mode === 'local' ? GRIST_LOCAL_PROXIES
+                : mode === 'chartsbuilder' ? GRIST_CB_PROXIES
+                : null;
+  return (proxies && proxies[host]) || clean;
+}
+
+/* ── Normalisation des enregistrements GRIST (remplace gouv-normalize) ── */
+
+/* 'Nom:name|Parent:parentId' => { Nom: 'name', Parent: 'parentId' } */
+function parseRenameSpec(spec) {
+  const map = {};
+  (spec || '').split('|').forEach(pair => {
+    const i = pair.indexOf(':');
+    if (i > 0) map[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+  });
+  return map;
+}
+
+/* Reponse /records => lignes a plat { id, name, parentId, … }, chaines trimees.
+   L'id de ligne GRIST prime : les colonnes Ref pointent dessus. */
+function gristApiToRecords(json, renameSpec) {
+  const rename = parseRenameSpec(renameSpec);
+  const records = Array.isArray(json) ? json : (json && json.records) || [];
+
+  return records.map(rec => {
+    const fields = (rec && rec.fields) || {};
+    const row = {};
+    for (const key of Object.keys(fields)) {
+      const value = fields[key];
+      row[rename[key] || key] = typeof value === 'string' ? value.trim() : value;
+    }
+    row.id = rec ? rec.id : undefined;
+    return row;
+  });
+}
+
 /* ── Construction arbre GRIST ── */
 
 function gristRecordsToTree(records) {
@@ -248,6 +307,7 @@ if (typeof module !== 'undefined' && module.exports) {
     esc, getChildIds, parseAdresse, parseResponsable, parseTelephone,
     parseReseauSocial, parseGristSocial, parseModalSocial,
     entityToNode, countNodes, maxTreeDepth, flattenForD3, flattenForCSV,
-    findNode, detachNode, gristRecordsToTree, cleanTreeForSave
+    findNode, detachNode, gristRecordsToTree, cleanTreeForSave,
+    gristApiBase, parseRenameSpec, gristApiToRecords
   };
 }
