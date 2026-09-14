@@ -32,6 +32,32 @@ L'application est une page statique (HTML + CSS + JS) sans framework ni build. E
 | Données | [API Annuaire service-public.gouv.fr](https://api-lannuaire.service-public.gouv.fr/) |
 | Hébergement | GitHub Pages |
 
+## Source GRIST
+
+En alternative à l'API Annuaire, l'organigramme peut être construit depuis une table GRIST
+(colonnes attendues : `Nom`, `Parent` (Ref, `0` pour la racine), `AncienNom`, `Responsable`,
+`Fonction`, `Telephone`, `Adresse`, `Contact`, `Siren`, `Reseaux`).
+
+**ID du document** — c'est le segment qui suit `/o/<org>/` dans l'URL GRIST, sans le nom lisible :
+
+```
+https://grist.numerique.gouv.fr/o/docs/pUc8X9tNGAt7/Tests-organigrammes-automatiques
+                                        ^^^^^^^^^^^^ ID du document
+```
+
+**Accès API** — les appels partent du navigateur ; trois modes au choix :
+
+| Mode | URL appelée | Quand l'utiliser |
+|------|-------------|------------------|
+| **Direct** (défaut) | `https://grist.…/api/docs/…` | Le serveur GRIST autorise le CORS pour les appels porteurs d'une clé API |
+| **Proxy local** | `/grist-gouv/api/docs/…` | Déploiement nginx/Docker : même origine, donc ni CORS ni preflight (voir `nginx.conf`) |
+| **Proxy Charts Builder** | `https://chartsbuilder.matge.com/grist-gouv-proxy/…` | Secours historique |
+
+Le mode « Proxy local » n'existe que sur le déploiement nginx, avec une cible figée par route
+(`/grist-gouv/` → `grist.numerique.gouv.fr`, `/grist-saas/` → `docs.getgrist.com`) pour ne pas
+exposer un relais ouvert. Un serveur auto-hébergé retombe toujours sur l'appel direct : à lui
+d'autoriser l'origine de la page.
+
 ## Lancer en local
 
 Ouvrir `index.html` dans un navigateur, ou servir avec n'importe quel serveur statique :

@@ -3,7 +3,8 @@ import {
   esc, getChildIds, parseAdresse, parseResponsable, parseTelephone,
   parseReseauSocial, parseGristSocial, parseModalSocial,
   entityToNode, countNodes, maxTreeDepth, flattenForD3, flattenForCSV,
-  findNode, detachNode, gristRecordsToTree, cleanTreeForSave
+  findNode, detachNode, gristRecordsToTree, cleanTreeForSave,
+  gristApiBase, parseRenameSpec, gristApiToRecords
 } from '../lib.js';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -479,5 +480,102 @@ describe('cleanTreeForSave', () => {
     const clean = cleanTreeForSave(node);
     expect(clean.name).toBe('Test');
     expect(clean.siren).toBe('123');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   gristApiBase
+══════════════════════════════════════════════════════════════════ */
+
+describe('gristApiBase', () => {
+  it('mode direct : renvoie le serveur tel quel', () => {
+    expect(gristApiBase('https://grist.numerique.gouv.fr', 'direct'))
+      .toBe('https://grist.numerique.gouv.fr');
+  });
+  it('supprime le(s) slash(s) final(aux)', () => {
+    expect(gristApiBase('https://grist.numerique.gouv.fr//', 'direct'))
+      .toBe('https://grist.numerique.gouv.fr');
+  });
+  it('mode local : proxy nginx meme origine pour les hotes connus', () => {
+    expect(gristApiBase('https://grist.numerique.gouv.fr', 'local')).toBe('/grist-gouv');
+    expect(gristApiBase('https://docs.getgrist.com', 'local')).toBe('/grist-saas');
+  });
+  it('mode chartsbuilder : proxy historique pour les hotes connus', () => {
+    expect(gristApiBase('https://grist.numerique.gouv.fr', 'chartsbuilder'))
+      .toBe('https://chartsbuilder.matge.com/grist-gouv-proxy');
+  });
+  it('serveur auto-heberge : retombe sur le direct quel que soit le mode', () => {
+    expect(gristApiBase('https://grist.mondomaine.fr', 'local')).toBe('https://grist.mondomaine.fr');
+    expect(gristApiBase('https://grist.mondomaine.fr', 'chartsbuilder')).toBe('https://grist.mondomaine.fr');
+  });
+  it('mode absent ou inconnu : direct', () => {
+    expect(gristApiBase('https://grist.numerique.gouv.fr')).toBe('https://grist.numerique.gouv.fr');
+    expect(gristApiBase('https://grist.numerique.gouv.fr', 'xxx')).toBe('https://grist.numerique.gouv.fr');
+  });
+  it('base vide ou URL invalide', () => {
+    expect(gristApiBase('', 'local')).toBe('');
+    expect(gristApiBase(null, 'direct')).toBe('');
+    expect(gristApiBase('pas-une-url', 'local')).toBe('pas-une-url');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   parseRenameSpec / gristApiToRecords
+══════════════════════════════════════════════════════════════════ */
+
+describe('parseRenameSpec', () => {
+  it('parse les paires colonne:champ', () => {
+    expect(parseRenameSpec('Nom:name|Parent:parentId'))
+      .toEqual({ Nom: 'name', Parent: 'parentId' });
+  });
+  it('ignore les fragments sans deux-points', () => {
+    expect(parseRenameSpec('Nom:name|cassee|')).toEqual({ Nom: 'name' });
+  });
+  it('spec vide', () => {
+    expect(parseRenameSpec('')).toEqual({});
+    expect(parseRenameSpec(null)).toEqual({});
+  });
+});
+
+describe('gristApiToRecords', () => {
+  const RENAME = 'Nom:name|Parent:parentId|Telephone:telephone';
+
+  it('aplatit id + fields et renomme les colonnes', () => {
+    const rows = gristApiToRecords({
+      records: [{ id: 1, fields: { Nom: 'DINUM', Parent: 0, Telephone: '01' } }]
+    }, RENAME);
+    expect(rows).toEqual([{ id: 1, name: 'DINUM', parentId: 0, telephone: '01' }]);
+  });
+  it('trim les chaines, laisse les autres types intacts', () => {
+    const rows = gristApiToRecords({
+      records: [{ id: 2, fields: { Nom: '  DSI  ', Parent: 1, Siren: null } }]
+    }, RENAME);
+    expect(rows[0].name).toBe('DSI');
+    expect(rows[0].parentId).toBe(1);
+    expect(rows[0].Siren).toBeNull();
+  });
+  it('conserve les colonnes non mappees sous leur nom GRIST', () => {
+    const rows = gristApiToRecords({ records: [{ id: 3, fields: { Autre: 'x' } }] }, RENAME);
+    expect(rows[0].Autre).toBe('x');
+  });
+  it("l'id de ligne prime sur une colonne renommee en id", () => {
+    const rows = gristApiToRecords({ records: [{ id: 7, fields: { Code: 'Z' } }] }, 'Code:id');
+    expect(rows[0].id).toBe(7);
+  });
+  it('accepte un tableau brut et les payloads vides', () => {
+    expect(gristApiToRecords([{ id: 1, fields: { Nom: 'A' } }], RENAME)).toEqual([{ id: 1, name: 'A' }]);
+    expect(gristApiToRecords({}, RENAME)).toEqual([]);
+    expect(gristApiToRecords(null, RENAME)).toEqual([]);
+  });
+  it('chaine bien avec gristRecordsToTree', () => {
+    const tree = gristRecordsToTree(gristApiToRecords({
+      records: [
+        { id: 1, fields: { Nom: 'Racine', Parent: 0 } },
+        { id: 2, fields: { Nom: 'Enfant', Parent: 1 } }
+      ]
+    }, RENAME));
+    expect(tree.name).toBe('Racine');
+    expect(tree.children).toHaveLength(1);
+    expect(tree.children[0].name).toBe('Enfant');
   });
 });

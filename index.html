@@ -9,7 +9,6 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-org-chart@3/build/d3-org-chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-flextree@2.1.2/build/d3-flextree.js"></script>
-<script src="https://chartsbuilder.matge.com/dist/gouv-widgets.umd.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -69,6 +68,16 @@
       <div class="fr-input-group" id="grist-custom-url-group" style="display:none">
         <label class="fr-label" for="grist-custom-url">URL du serveur</label>
         <input class="fr-input" type="url" id="grist-custom-url" placeholder="https://grist.mondomaine.fr">
+      </div>
+      <div class="fr-select-group">
+        <label class="fr-label" for="grist-access">Acc&egrave;s API
+          <span class="fr-hint-text">Direct = appel navigateur &rarr; GRIST (n&eacute;cessite le CORS c&ocirc;t&eacute; serveur)</span>
+        </label>
+        <select class="fr-select fr-select--sm" id="grist-access">
+          <option value="direct" selected>Direct</option>
+          <option value="local">Proxy local (m&ecirc;me origine)</option>
+          <option value="chartsbuilder">Proxy Charts Builder (historique)</option>
+        </select>
       </div>
       <div class="fr-input-group">
         <label class="fr-label" for="grist-key">Cl&eacute; API
@@ -356,8 +365,6 @@
 </div>
 
 <!-- GRIST web components (invisibles) -->
-<gouv-source id="grist-src" style="display:none"></gouv-source>
-<gouv-normalize id="grist-norm" source="grist-src" trim style="display:none"></gouv-normalize>
 
 <script src="lib.js"></script>
 <script src="app.js"></script>
